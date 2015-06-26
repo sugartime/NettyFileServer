@@ -35,6 +35,7 @@ import java.io.File;
 import java.net.URISyntaxException;
 import java.net.URL;
 
+import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
 
@@ -52,19 +53,18 @@ public final class FileServer {
 	//static File f_certificate;
 	//final File f_privatekey = new File("src/serverkey.pem");
 		
-	
-	private boolean mIsSsl;
+	private Logger logger = Logger.getLogger(this.getClass());
+
 	private int mPort;
 	
 			
 	
 	
-	public FileServer(boolean isSsl) {
-		 
-		this.mIsSsl	= isSsl;
-		this.mPort = (this.mIsSsl ? FileServerConstants.SSL_PORT : FileServerConstants.PORT);
+	public FileServer() {
 		
-		System.out.println("mIsSsl :"+mIsSsl+" mPort:"+mPort);
+		this.mPort = (FileServerConstants.IS_SSL ? FileServerConstants.SSL_PORT : FileServerConstants.PORT);
+		
+		logger.info("SSL :"+FileServerConstants.IS_SSL+" mPort:"+mPort);
 		
     }
 
@@ -77,7 +77,7 @@ public final class FileServer {
 
 		// Configure SSL.
         final SslContext sslCtx;
-        if (mIsSsl) {
+        if (FileServerConstants.IS_SSL) {
             SelfSignedCertificate ssc = new SelfSignedCertificate();
             sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey()).build();
         	//sslCtx = SslContextBuilder.forServer(f_certificate, f_privatekey,"12345").build();
@@ -102,12 +102,7 @@ public final class FileServer {
                          p.addLast(sslCtx.newHandler(ch.alloc()));
                      }
                      p.addLast(
-                             //new StringEncoder(CharsetUtil.UTF_8),
-                             //new LineBasedFrameDecoder(8192),
-                             //new StringDecoder(CharsetUtil.UTF_8),
-                    		 //new FileDecoder(),
                              new ChunkedWriteHandler(),
-                    		 //new FileServerChunkedHandler());
                              new FileServerHandler());
                  }
              });
@@ -119,6 +114,9 @@ public final class FileServer {
             f.channel().closeFuture().sync();
         } finally {
             // Shut down all event loops to terminate all threads.
+        	logger.info("File Server Shut down");
+        	
+        	        	
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
@@ -128,8 +126,7 @@ public final class FileServer {
     public static void main(String[] args) throws Exception {
     	
     	PropertyConfigurator.configure("resources/log4j.properties");
-    	
-    	// true : ssl, false : modern
-    	new FileServer(false).run();
+    
+    	new FileServer().run();
     }
 }

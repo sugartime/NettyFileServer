@@ -46,7 +46,7 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	private Logger logger = Logger.getLogger(this.getClass());
 	
 	//DB
-	private static BoneCP connectionPool = null;
+	public static BoneCP connectionPool = null;
 	
 		
 	public static final int ID_LENGTH = 10;
@@ -63,7 +63,8 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	
 	long mFileLength;
 	
-	String mFileString;
+	String mFileName;
+	String mNewFileName;
 	
 	//생성자
 	FileServerHandler(){
@@ -72,7 +73,7 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	
 	//디비풀링 초기화
 	private void initDbPool(){
-		logger.info("init db pool");
+		logger.debug("init db pool");
 		
 		try {
 			Class.forName(FileServerConstants.DB_DRIVER);
@@ -93,7 +94,7 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 			connectionPool = new BoneCP(config); 
 			
 		}catch (SQLException e) {
-			logger.info(e.getMessage());
+			logger.fatal(e.getMessage());
 		}
 		
 	}
@@ -118,11 +119,11 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 			// execute insert SQL stetement
 			preparedStatement.executeUpdate();
  
-			logger.info("Record is inserted into DBUSER table!");
+			logger.debug("Record is inserted into DBUSER table!");
  
 		} catch (SQLException e) {
  
-			logger.info(e.getMessage());
+			logger.fatal(e.getMessage());
  
 		} finally {
  
@@ -133,13 +134,17 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 			if (dbConnection != null) {
 				dbConnection.close();
 			}
+			
+			if(connectionPool!=null){
+				connectionPool.shutdown();
+			}
 		}
  
 	}
 
 	@Override
 	public void handlerAdded(ChannelHandlerContext ctx) {
-		 System.out.println("handlerAdded");
+		logger.debug("handlerAdded");
 	        
 		 mBuf = ctx.alloc().buffer(8192); // (1)
 		 
@@ -151,7 +156,9 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 		 
 		 mFileLength=0L;
 		 
-		 mFileString="";
+		 mFileName="";
+		 
+		 mNewFileName="";
 	        
 	 }
 
@@ -160,8 +167,8 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	
 	@Override
 	public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-		// TODO Auto-generated method stub
-		System.err.println("handlerRemoved");
+
+		logger.debug("handlerRemoved");
 		mBuf.release();
 	    mBuf = null;
 	}
@@ -170,7 +177,7 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
-		System.out.println("channelActive");
+		logger.debug("channelActive");
 	}
 	
 	
@@ -178,14 +185,14 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	@Override
 	public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
 		// TODO Auto-generated method stub
-		System.out.println("channelReadComplete");
+		logger.debug("channelReadComplete");
 		
 	}
 	
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
 		// TODO Auto-generated method stub
-		//System.out.println("channelRead");
+		logger.debug("channelRead0");
 		
 		ByteBuf m = (ByteBuf) msg;
 		
@@ -193,15 +200,15 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
                 
         //m.release();
         
-        System.out.println("mBuf.readableBytes() :"+mBuf.readableBytes());
-                        
-		System.out.println("mIsInitFile :"+mIsInitFile);
-			
-		if(mIsInitFile==false && mBuf.readableBytes()>=1024){
+        logger.debug("mBuf.readableBytes() :"+mBuf.readableBytes());
+        logger.debug("mIsInitFile :"+mIsInitFile);
+        
+       			
+		if(mIsInitFile==false && mBuf.readableBytes()>=FileServerConstants.INIT_BUF_SIZE){
 			
 	        //파일이름 길이
 	        mNameLen = mBuf.readInt();
-	        System.out.println("mNameLen :"+mNameLen);
+	        logger.debug("mNameLen :"+mNameLen);
 	        
 	        //파일이름
 	        mBytes = new byte[mNameLen];
@@ -212,16 +219,13 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	          
 	        	file_string += (char)mBytes[i];
 	        }
-	        String fileName=URLDecoder.decode(file_string,"UTF-8");
-	        System.err.println("fileName :"+fileName);
-	        
-	        	        
+	        mFileName=URLDecoder.decode(file_string,"UTF-8");
+	        logger.info("fileName :"+mFileName);
 	        	        
 	        //파일전체길이
 	        mFileLength=mBuf.readLong();
-	        System.out.println("mFileLength :"+mFileLength);  
-	        	        	        
-	        
+	        logger.info("mFileLength :"+mFileLength);  
+	        	       
 	        //공백으로 채워진 곳 읽기
 	        byte[] zeroBytes = new byte[mBuf.readableBytes()];
 	        mBuf.readBytes(zeroBytes);
@@ -230,17 +234,13 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	        
 	        
 	        //파일이름 변경
-	        String[] arrFileName=fileName.split("\\.");
+	        String[] arrFileName=mFileName.split("\\.");
 	        String fileNameHead = arrFileName[0];
 	        String fileNameExt  = arrFileName[1];
-	        System.out.println("fileNameHead "+fileNameHead);
-	        System.out.println("fileNameExt "+fileNameExt);
-	        
-	        //String newFileName = generateUniqueId()+"."+fileNameExt;
 	        String newFileName =  UUID.randomUUID().toString().replace("-", "")+"."+fileNameExt;
-	        mFileString=newFileName;
-	        
-	        System.out.println("mFileString "+mFileString);
+	        mNewFileName=newFileName;
+        
+	        logger.info("mNewFileName "+mNewFileName);
 	        
 	        //변경된 파일이름을 전송
 	        String f_name ="";
@@ -249,33 +249,34 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 			} catch (UnsupportedEncodingException e) {
 				e.printStackTrace();
 			}
-	        ByteBuf buf=ctx.alloc().buffer(512);
+	        ByteBuf buf=ctx.alloc().buffer(FileServerConstants.INIT_BUF_SIZE);
 	        buf.writeInt(f_name.length());					//파일이름 길이(4)
 			buf.writeBytes(f_name.getBytes());				//파일이름 파일이름에따라 틀림
 			buf.writeZero(buf.capacity()-buf.writerIndex()); 	//나머지 부분을 0으로 셋팅해서 버퍼크기를 맞춤
+			
 			ctx.writeAndFlush(buf);
 			
+			//디비에 저장
+			try {
+				insertRecordIntoTable(mFileName,newFileName);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				logger.fatal(e.getMessage());
+			}
+			
 	        //mBuf.markReaderIndex();
-	        //System.out.println("mBuf.markReaderIndex :"+mBuf.readableBytes());
-	        //System.out.println("mBuf.markReaderIndex :"+mBuf.markReaderIndex());
-	        
 		}
         
 		//여기부터 파일 기록
-		//System.out.println("m_IsInitFile :"+m_IsInitFile);
 		if(mIsInitFile==true){
 			
-			System.err.println("File Write !!");
+			logger.debug("File Write !!");
 			
-						
-			FileOutputStream fos = new FileOutputStream("c:\\test\\"+mFileString,true);
+			FileOutputStream fos = new FileOutputStream("c:\\test\\"+mNewFileName,true);
 						
 			long len=mBuf.readableBytes();
 			
 			mTotal+=len;
-			
-			
-			//System.out.println("len["+len+"] mTotal["+mTotal+"] mFileLength["+mFileLength+"]");
 			
 			byte b[]=new byte[(int)len];
 			mBuf.readBytes(b);
@@ -284,11 +285,8 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 			mBuf.clear();
 
 			if(mTotal>=mFileLength){	
-				
-				System.err.println("=========>완료");
-				//m_buf.release();
-				
-				
+				logger.info("=========> File Write Complete! FileName["+mFileName+"] newFileName["+mNewFileName+"] fileSize["+mFileLength+"]");
+				ctx.close();
 			}
 		
 		}

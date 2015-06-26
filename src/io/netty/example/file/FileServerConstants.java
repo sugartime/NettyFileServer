@@ -11,8 +11,10 @@ public class FileServerConstants {
 	static final String DB_PASSWORD = "12345";
 	
 	/** NETTY */
-	static final int PORT 		= 8023;
-	static final int SSL_PORT 	= 8992;
+	static final boolean  	IS_SSL 			= true; //SSL 동작여부
+	static final int 		PORT 			= 8023;
+	static final int 		SSL_PORT 		= 8992;
+	static final int 		INIT_BUF_SIZE 	= 512;  //파일전송전 보내는 파일내용 버퍼 크기
 	
 	
 }
