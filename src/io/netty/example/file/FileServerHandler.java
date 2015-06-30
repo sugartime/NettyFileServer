@@ -146,7 +146,7 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	public void handlerAdded(ChannelHandlerContext ctx) {
 		logger.debug("handlerAdded");
 	        
-		 mBuf = ctx.alloc().buffer(8192); // (1)
+		 mBuf = ctx.alloc().buffer(FileServerConstants.SND_BUF_SIZE); // (1)
 		 
 		 mTotal = 0L;
 		 
@@ -204,7 +204,9 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
         logger.debug("mIsInitFile :"+mIsInitFile);
         
        			
-		if(mIsInitFile==false && mBuf.readableBytes()>=FileServerConstants.INIT_BUF_SIZE){
+		//if(mIsInitFile==false && mBuf.readableBytes()>=FileServerConstants.INIT_BUF_SIZE){
+        
+        if(mIsInitFile==false && mBuf.readableBytes()>=FileServerConstants.INIT_BUF_SIZE){
 			
 	        //파일이름 길이
 	        mNameLen = mBuf.readInt();
@@ -226,8 +228,9 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 	        mFileLength=mBuf.readLong();
 	        logger.info("mFileLength :"+mFileLength);  
 	        	       
+	        logger.info("mBuf.readerIndex() :"+mBuf.readerIndex());
 	        //공백으로 채워진 곳 읽기
-	        byte[] zeroBytes = new byte[mBuf.readableBytes()];
+	        byte[] zeroBytes = new byte[FileServerConstants.INIT_BUF_SIZE-mBuf.readerIndex()];
 	        mBuf.readBytes(zeroBytes);
 	        	        
 	        mIsInitFile=true;
@@ -250,8 +253,8 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 				e.printStackTrace();
 			}
 	        ByteBuf buf=ctx.alloc().buffer(FileServerConstants.INIT_BUF_SIZE);
-	        buf.writeInt(f_name.length());					//파일이름 길이(4)
-			buf.writeBytes(f_name.getBytes());				//파일이름 파일이름에따라 틀림
+	        buf.writeInt(f_name.length());						//파일이름 길이(4)
+			buf.writeBytes(f_name.getBytes());					//파일이름 파일이름에따라 틀림
 			buf.writeZero(buf.capacity()-buf.writerIndex()); 	//나머지 부분을 0으로 셋팅해서 버퍼크기를 맞춤
 			
 			ctx.writeAndFlush(buf);
@@ -283,6 +286,8 @@ public class FileServerHandler extends SimpleChannelInboundHandler<Object>  {
 			fos.write(b);
 			fos.close();
 			mBuf.clear();
+			
+			logger.info("File Write len["+len+"] mTotal["+mTotal+"] fileSize["+mFileLength+"]");
 
 			if(mTotal>=mFileLength){	
 				logger.info("=========> File Write Complete! FileName["+mFileName+"] newFileName["+mNewFileName+"] fileSize["+mFileLength+"]");
